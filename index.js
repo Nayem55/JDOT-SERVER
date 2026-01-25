@@ -219,7 +219,7 @@ async function run() {
       };
       const cursor = productCollection
         .find(query)
-        .sort({ date_created: -1 })
+        // .sort({ date_created: -1 })
         .skip(page * 50)
         .limit(50)
         .project(projection);
