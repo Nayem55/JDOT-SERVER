@@ -433,7 +433,6 @@ async function run() {
     app.get("/getProductsByCategories", async (req, res) => {
       const page = req.query.page;
       const name = req.query.name;
-      console.log(name);
       const query = {
         status: "publish",
         "categories.name": {
@@ -449,6 +448,25 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
+    app.get("/productsByCategories", async (req, res) => {
+      const page = req.query.page;
+      const name = req.query.name;
+      const query = {
+        status: "publish",
+        "categories.name": {
+          $regex: new RegExp(`\\b${name}\\b`, "i"), // "i" for case-insensitive
+        },
+      };
+      const cursor = productCollection
+        .find(query)
+        .sort({ date_created: -1 })
+        .skip(page * 12)
+        .limit(12)
+        .project(projection);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     //filter products by categories
     app.get("/filterByCategories", async (req, res) => {
       const page = req.query.page;
