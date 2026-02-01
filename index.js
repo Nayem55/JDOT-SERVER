@@ -2,15 +2,41 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { default: axios } = require("axios");
+const crypto = require("crypto");
 
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 
 const app = express();
 
+const allowedOrigins = [
+  "http://localhost:3002",
+  "https://j.fragrancesbd.com",
+  "https://www.j.fragrancesbd.com",
+];
+
 // middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow non-browser requests (Postman/server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      return callback(new Error("Not allowed by CORS: " + origin));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+// ✅ handle preflight properly
+app.options("*", cors());
+
 app.use(express.json({ limit: "10mb" }));
+
+require("node:dns/promises").setServers(["1.1.1.1", "8.8.8.8"]);
 
 // app.use(require('prerender-node').set('prerenderToken', 'acSrdk6q1skW6zoArcQT'));
 
@@ -21,7 +47,6 @@ app.use(express.json({ limit: "10mb" }));
 const uri =
   "mongodb+srv://jdot:jdot@cluster0.jzzej6f.mongodb.net/?retryWrites=true&w=majority";
 
-
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -30,7 +55,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-
     const productCollection = client.db("JDOT").collection("products");
     const orderCollection = client.db("JDOT").collection("orders");
     const userCollection = client.db("JDOT").collection("users");
@@ -117,14 +141,14 @@ async function run() {
       try {
         const result = await productCollection.updateMany(
           {}, // Filter: only products with status 'publish'
-          { $set: { brand: brandName } } // Update: set the brand field to the given brand name
+          { $set: { brand: brandName } }, // Update: set the brand field to the given brand name
         );
 
         res.send({
           message: `${result.modifiedCount} products updated with brand: ${brandName}`,
         });
         console.log(
-          `${result.modifiedCount} products updated with brand: ${brandName}`
+          `${result.modifiedCount} products updated with brand: ${brandName}`,
         );
       } catch (error) {
         console.error(error);
@@ -196,9 +220,9 @@ async function run() {
             {
               $set: {
                 on_sale: true,
-                sale_price: Math.floor(product.regular_price * 0.80),
+                sale_price: Math.floor(product.regular_price * 0.8),
               },
-            }
+            },
           );
         }
 
@@ -268,7 +292,7 @@ async function run() {
             headers: {
               "Content-Type": "application/json",
             },
-          }
+          },
         );
         res.status(response.status).json(response.data);
       } catch (error) {
@@ -500,7 +524,7 @@ async function run() {
       const result = await productCollection.updateOne(
         filter,
         updatedDoc,
-        options
+        options,
       );
       res.send(result);
     });
@@ -614,11 +638,172 @@ async function run() {
       res.send(result);
     });
 
+    // ---- Helpers................................................
+    function sha256(v) {
+      return crypto.createHash("sha256").update(v).digest("hex");
+    }
+    function normEmail(email) {
+      return String(email || "")
+        .trim()
+        .toLowerCase();
+    }
+    function normPhoneBD(phone) {
+      // expects 01XXXXXXXXX -> +8801XXXXXXXXX
+      const p = String(phone || "").trim();
+      if (!p) return "";
+      if (p.startsWith("+")) return p;
+      if (p.length === 11 && p.startsWith("01")) return `+88${p}`;
+      return p;
+    }
+    function hashIfPresent(value, normalizer = (x) => x) {
+      const v = normalizer(value);
+      if (!v) return undefined;
+      return sha256(v);
+    }
+    function getClientIp(req) {
+      const xf = req.headers["x-forwarded-for"];
+      if (xf) return String(xf).split(",")[0].trim();
+      return req.ip;
+    }
+
+    // ---- Send Purchase to Meta CAPI
+    async function sendPurchaseCapi({ req, order, eventId, eventSourceUrl }) {
+      const pixelId = process.env.META_PIXEL_ID;
+      const token = process.env.META_CAPI_TOKEN;
+
+      if (!pixelId || !token)
+        return { skipped: true, reason: "Missing pixel/token" };
+
+      // Use a current Graph version. If you prefer, change v23.0 to a newer one later.
+      const url = `https://graph.facebook.com/v23.0/${pixelId}/events`;
+
+      const event_time = Math.floor(Date.now() / 1000);
+
+      // cookies set by Meta Pixel in browser (best if you serve your API on same domain/subdomain)
+      const fbp = req.cookies?._fbp;
+      const fbc = req.cookies?._fbc;
+
+      const billing = order?.billing || {};
+      const items = Array.isArray(order?.items) ? order.items : [];
+
+      // Build contents
+      const contents = items.map((p) => ({
+        id: String(p.product_id),
+        quantity: Number(p.quantity || 1),
+        // optional: item_price improves reporting
+        item_price:
+          p.total && p.quantity
+            ? Number(p.total) / Number(p.quantity)
+            : undefined,
+      }));
+
+      const payload = {
+        data: [
+          {
+            event_name: "Purchase",
+            event_time,
+            event_id: String(eventId),
+            action_source: "website",
+            event_source_url: eventSourceUrl,
+
+            user_data: {
+              client_ip_address: getClientIp(req),
+              client_user_agent: req.headers["user-agent"],
+
+              em: hashIfPresent(billing.email, normEmail),
+              ph: hashIfPresent(billing.phone, normPhoneBD),
+
+              fn: hashIfPresent(billing.first_name, (x) =>
+                String(x || "")
+                  .trim()
+                  .toLowerCase(),
+              ),
+              ln: hashIfPresent(billing.last_name, (x) =>
+                String(x || "")
+                  .trim()
+                  .toLowerCase(),
+              ),
+              ct: hashIfPresent(billing.city, (x) =>
+                String(x || "")
+                  .trim()
+                  .toLowerCase(),
+              ),
+              st: hashIfPresent(billing.state, (x) =>
+                String(x || "")
+                  .trim()
+                  .toLowerCase(),
+              ),
+              country: hashIfPresent(billing.country, (x) =>
+                String(x || "")
+                  .trim()
+                  .toLowerCase(),
+              ),
+
+              fbp,
+              fbc,
+            },
+
+            custom_data: {
+              currency: "BDT",
+              value: Number(order.total || 0),
+              content_type: "product",
+              contents,
+            },
+          },
+        ],
+      };
+
+      if (process.env.META_TEST_EVENT_CODE) {
+        payload.test_event_code = process.env.META_TEST_EVENT_CODE;
+      }
+
+      const resp = await axios.post(url, payload, {
+        params: { access_token: token },
+        timeout: 15000,
+      });
+
+      return resp.data;
+    }
+
     // post order list
     app.post("/order", async (req, res) => {
-      const orderList = req.body;
-      const result = await orderCollection.insertOne(orderList);
-      res.send(result);
+      try {
+        const { order, eventId, eventSourceUrl } = req.body;
+
+        if (!order) return res.status(400).send({ error: "Missing order" });
+        if (!eventId) return res.status(400).send({ error: "Missing eventId" });
+
+        // Save order
+        const insertRes = await orderCollection.insertOne({
+          ...order,
+          _capi_event_id: String(eventId),
+          _event_source_url: eventSourceUrl || "",
+          createdAt: new Date(),
+        });
+
+        // Send CAPI (do not break order if Meta fails)
+        let capiResult = null;
+        try {
+          capiResult = await sendPurchaseCapi({
+            req,
+            order,
+            eventId,
+            eventSourceUrl: eventSourceUrl || req.headers.referer || "",
+          });
+          console.log(capiResult);
+        } catch (e) {
+          console.error("❌ CAPI error:", e?.response?.data || e.message);
+        }
+
+        res.send({
+          ok: true,
+          insertedId: insertRes.insertedId,
+          capi: capiResult,
+        });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ error: "Order failed" });
+      }
     });
     // get admin dashboard orders
     app.get("/orders", async (req, res) => {
@@ -741,7 +926,7 @@ async function run() {
       const result = await orderCollection.updateOne(
         filter,
         updatedDoc,
-        options
+        options,
       );
       res.send(result);
     });
@@ -757,7 +942,7 @@ async function run() {
       const result = await userCollection.updateOne(
         filter,
         updatedDoc,
-        options
+        options,
       );
       res.send(result);
     });
@@ -895,7 +1080,7 @@ async function run() {
       const result = await couponCollection.updateOne(
         filter,
         updatedDoc,
-        options
+        options,
       );
       res.send(result);
     });
@@ -949,7 +1134,7 @@ async function run() {
       const result = await blogCollection.updateOne(
         filter,
         updatedDoc,
-        options
+        options,
       );
       res.send(result);
     });
@@ -1025,7 +1210,7 @@ async function run() {
       const result = await reviewCollection.updateOne(
         filter,
         updatedDoc,
-        options
+        options,
       );
       res.send(result);
     });
@@ -1143,7 +1328,7 @@ async function run() {
         await popup.updateOne(
           { _id: "EBAY_POPUP" },
           { $set: payload },
-          { upsert: true }
+          { upsert: true },
         );
         res.json({ ok: true });
       } catch (err) {
@@ -1178,7 +1363,7 @@ async function run() {
         const result = await popup.updateOne(
           { _id: "EBAY_POPUP" },
           { $setOnInsert: payload },
-          { upsert: true }
+          { upsert: true },
         );
 
         if (result.upsertedCount === 1) {
