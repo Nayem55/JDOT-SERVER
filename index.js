@@ -10,26 +10,31 @@ const port = process.env.PORT || 5000;
 const app = express();
 
 const allowedOrigins = [
-  "http://localhost:3002",
   "https://j.fragrancesbd.com",
   "https://www.j.fragrancesbd.com",
 ];
 
-// middleware
 app.use(
   cors({
     origin: function (origin, callback) {
-      // allow non-browser requests (Postman/server-to-server)
+      // allow requests with no origin (like Postman)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // allow any localhost port
+      if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
 
-      return callback(new Error("Not allowed by CORS: " + origin));
+      // allow production domains
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // block everything else
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
+  })
 );
 // ✅ handle preflight properly
 app.options("*", cors());
