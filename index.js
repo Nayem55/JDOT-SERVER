@@ -12,7 +12,6 @@ const app = express();
 const allowedOrigins = [
   "https://j.fragrancesbd.com",
   "https://www.j.fragrancesbd.com",
-  "https://shop.fragrancesbd.com/",
 ];
 
 app.use(
