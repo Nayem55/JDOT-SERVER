@@ -9,35 +9,37 @@ const port = process.env.PORT || 5000;
 
 const app = express();
 
-const allowedOrigins = [
-  "https://j.fragrancesbd.com",
-  "https://www.j.fragrancesbd.com",
-];
+// const allowedOrigins = [
+//   "https://j.fragrancesbd.com",
+//   "https://www.j.fragrancesbd.com",
+// ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (like Postman)
-      if (!origin) return callback(null, true);
+// app.use(
+//   cors({
+//     origin: function (origin, callback) {
+//       // allow requests with no origin (like Postman)
+//       if (!origin) return callback(null, true);
 
-      // allow any localhost port
-      if (origin.match(/^http:\/\/localhost:\d+$/)) {
-        return callback(null, true);
-      }
+//       // allow any localhost port
+//       if (origin.match(/^http:\/\/localhost:\d+$/)) {
+//         return callback(null, true);
+//       }
 
-      // allow production domains
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+//       // allow production domains
+//       if (allowedOrigins.includes(origin)) {
+//         return callback(null, true);
+//       }
 
-      // block everything else
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
+//       // block everything else
+//       return callback(new Error("Not allowed by CORS"));
+//     },
+//     credentials: true,
+//   })
+// );
 // ✅ handle preflight properly
-app.options("*", cors());
+// app.options("*", cors());
+
+app.use(cors());
 
 app.use(express.json({ limit: "10mb" }));
 
