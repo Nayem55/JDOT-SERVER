@@ -209,7 +209,7 @@ async function run() {
     //       .json({ error: "An error occurred while updating product slugs" });
     //   }
     // });
-    app.get("/updateSaleStatus", async (req, res) => {
+    app.put("/updateSaleStatus", async (req, res) => {
       try {
         const query = {
           status: "publish",
@@ -217,19 +217,20 @@ async function run() {
         };
         const products = await productCollection
           .find(query)
-          .project(projection)
+          // .project(projection)
           .toArray();
         console.log(products.length);
 
         for (const product of products) {
+          // console.log(product.regular_price);
           await productCollection.updateOne(
             { _id: product._id },
             {
               $set: {
                 on_sale: true,
-                sale_price: Math.floor(product.regular_price * 0.8),
+                sale_price: Math.floor(product.regular_price * 0.90),
               },
-            },
+            }
           );
         }
 
