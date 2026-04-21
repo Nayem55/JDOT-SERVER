@@ -77,6 +77,9 @@ async function run() {
       _id: 1,
       id: 1,
       name: 1,
+      size: 1,
+      type: 1,
+      gender: 1,
       slug: 1,
       price: 1,
       description: 1,
@@ -102,6 +105,9 @@ async function run() {
     const projection4 = {
       _id: 0,
       name: 1,
+      size: 1,
+      type: 1,
+      gender: 1,
       slug: 1,
       description: 1,
       images: 1,
@@ -213,7 +219,7 @@ async function run() {
       try {
         const query = {
           status: "publish",
-          stock_status: "instock",
+          // stock_status: "instock",
         };
         const products = await productCollection
           .find(query)
@@ -227,10 +233,10 @@ async function run() {
             { _id: product._id },
             {
               $set: {
-                on_sale: true,
-                sale_price: Math.floor(product.regular_price * 0.90),
+                on_sale: false,
+                sale_price: Math.floor(product.regular_price * 0),
               },
-            }
+            },
           );
         }
 
@@ -340,6 +346,69 @@ async function run() {
         slug: slug,
       });
       res.send(product);
+    });
+
+    // new for Api for Product card new features (navigatin by product size button)
+    // get all size variants of the same product name
+    app.get("/productVariants", async (req, res) => {
+      try {
+        const { name } = req.query;
+
+        if (!name) {
+          return res.status(400).send({ message: "Product name is required" });
+        }
+
+        const variants = await productCollection
+          .find({
+            status: "publish",
+            name: { $regex: new RegExp(`^${name}$`, "i") },
+          })
+          .project({
+            _id: 1,
+            name: 1,
+            size: 1,
+            slug: 1,
+            stock_status: 1,
+            regular_price: 1,
+            sale_price: 1,
+            on_sale: 1,
+          })
+          .sort({ size: 1 })
+          .toArray();
+
+        res.send(variants);
+      } catch (error) {
+        console.error("Error fetching product variants:", error);
+        res.status(500).send({ message: "Failed to fetch product variants" });
+      }
+    });
+
+    // get a single product by name and size
+    app.get("/productByNameAndSize", async (req, res) => {
+      try {
+        const { name, size } = req.query;
+
+        if (!name || !size) {
+          return res
+            .status(400)
+            .send({ message: "Name and size are required" });
+        }
+
+        const product = await productCollection.findOne({
+          status: "publish",
+          name: { $regex: new RegExp(`^${name}$`, "i") },
+          size: Number(size),
+        });
+
+        if (!product) {
+          return res.status(404).send({ message: "Product not found" });
+        }
+
+        res.send(product);
+      } catch (error) {
+        console.error("Error fetching product by name and size:", error);
+        res.status(500).send({ message: "Failed to fetch product" });
+      }
     });
 
     // get single backend product
