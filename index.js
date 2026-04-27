@@ -80,6 +80,7 @@ async function run() {
       size: 1,
       type: 1,
       gender: 1,
+      brand: 1,
       slug: 1,
       price: 1,
       description: 1,
@@ -108,6 +109,7 @@ async function run() {
       size: 1,
       type: 1,
       gender: 1,
+      brand: 1,
       slug: 1,
       description: 1,
       images: 1,
@@ -296,6 +298,197 @@ async function run() {
       res.send(products);
       console.log(products.length);
     });
+
+    app.get("/adminProductsFiltered", async (req, res) => {
+      try {
+        const page = Math.max(parseInt(req.query.page || "0", 10), 0);
+        const limit = Math.max(parseInt(req.query.limit || "50", 10), 1);
+
+        const search = String(req.query.search || "").trim();
+        const categories = String(req.query.categories || "").trim();
+        const brands = String(req.query.brands || "").trim();
+        const stockStatuses = String(req.query.stockStatuses || "").trim();
+        const saleStatuses = String(req.query.saleStatuses || "").trim();
+
+        const andConditions = [];
+
+        if (search) {
+          andConditions.push({
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { slug: { $regex: search, $options: "i" } },
+              { sku: { $regex: search, $options: "i" } },
+            ],
+          });
+        }
+
+        if (categories) {
+          const categoryList = categories
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+          if (categoryList.length) {
+            andConditions.push({
+              $or: categoryList.map((cat) => ({
+                "categories.name": { $regex: new RegExp(cat, "i") },
+              })),
+            });
+          }
+        }
+
+        if (brands) {
+          const brandList = brands
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+          if (brandList.length) {
+            andConditions.push({
+              $or: brandList.map((brand) => ({
+                brand: { $regex: new RegExp(`^${brand}$`, "i") },
+              })),
+            });
+          }
+        }
+
+        if (stockStatuses) {
+          const stockList = stockStatuses
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+          const stockConditions = [];
+
+          if (stockList.includes("instock")) {
+            stockConditions.push({
+              $or: [
+                { stock_status: "instock" },
+                { stock_status: "in stock" },
+                { stock_status: 1 },
+                { stock_status: "1" },
+                { stock_status: true },
+                { stock_status: "true" },
+              ],
+            });
+          }
+
+          if (stockList.includes("outofstock")) {
+            stockConditions.push({
+              $or: [
+                { stock_status: "outofstock" },
+                { stock_status: "out of stock" },
+                { stock_status: 0 },
+                { stock_status: "0" },
+                { stock_status: false },
+                { stock_status: "false" },
+              ],
+            });
+          }
+
+          if (stockConditions.length) {
+            andConditions.push({ $or: stockConditions });
+          }
+        }
+
+        if (saleStatuses) {
+          const saleList = saleStatuses
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+          const saleConditions = [];
+
+          if (saleList.includes("true")) {
+            saleConditions.push({
+              $or: [{ on_sale: true }, { on_sale: "true" }],
+            });
+          }
+
+          if (saleList.includes("false")) {
+            saleConditions.push({
+              $or: [
+                { on_sale: false },
+                { on_sale: "false" },
+                { on_sale: { $exists: false } },
+              ],
+            });
+          }
+
+          if (saleConditions.length) {
+            andConditions.push({ $or: saleConditions });
+          }
+        }
+
+        const query = andConditions.length ? { $and: andConditions } : {};
+
+        const totalCount = await productCollection.countDocuments(query);
+
+        const products = await productCollection
+          .find(query)
+          .sort({ date_created: -1 })
+          .skip(page * limit)
+          .limit(limit)
+          .toArray();
+
+        res.send({
+          products,
+          totalCount,
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+        });
+      } catch (error) {
+        console.error("adminProductsFiltered error:", error);
+        res.status(500).send({
+          message: "Failed to fetch filtered products",
+          error: error.message,
+        });
+      }
+    });
+
+    // (Bulk page) set brand api
+
+    app.get("/adminBrands", async (req, res) => {
+      try {
+        const manualBrands = [
+          "jdot",
+          "N/A",
+          // "armaf",
+          // "armaf beauty",
+          // "flormar",
+          // "eby",
+          // "lattafa",
+          // "clariss",
+          // "lear shot",
+        ];
+
+        const dbBrands = await productCollection.distinct("brand", {
+          brand: { $exists: true, $ne: "" },
+        });
+
+        const brands = Array.from(
+          new Set(
+            [...manualBrands, ...dbBrands]
+              .map((brand) =>
+                String(brand || "")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/\s+/g, " "),
+              )
+              .filter(Boolean),
+          ),
+        ).sort((a, b) => a.localeCompare(b));
+
+        res.send({ brands });
+      } catch (error) {
+        console.error("adminBrands error:", error);
+        res.status(500).send({
+          message: "Failed to fetch brands",
+          error: error.message,
+        });
+      }
+    });
+
     //ssl-wireless single sms
     app.post("/send-sms", async (req, res) => {
       try {
@@ -560,9 +753,9 @@ async function run() {
       };
       const cursor = productCollection
         .find(query)
-        .sort({ date_created: -1 })
-        .skip(page * 12)
-        .limit(12)
+        .sort({ date_created: 1 })
+        .skip(page * 50)
+        .limit(50)
         .project(projection);
       const result = await cursor.toArray();
       res.send(result);
