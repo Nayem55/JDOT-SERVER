@@ -276,6 +276,8 @@ async function run() {
       res.send({ count });
     });
 
+    // New api start for bulk - esa
+
     // get admin dashboard products
     app.get("/Allproducts", async (req, res) => {
       const page = parseInt(req.query.page);
@@ -297,6 +299,12 @@ async function run() {
       }
       res.send(products);
       console.log(products.length);
+    });
+
+    //get amount of data
+    app.get("/productCount", async (req, res) => {
+      const count = await productCollection.estimatedDocumentCount();
+      res.send({ count });
     });
 
     app.get("/adminProductsFiltered", async (req, res) => {
@@ -446,6 +454,32 @@ async function run() {
       }
     });
 
+    // edit product
+    app.put("/editProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: data,
+      };
+      const result = await productCollection.updateOne(
+        filter,
+        updatedDoc,
+        options,
+      );
+      res.send(result);
+    });
+
+    // delete product
+    app.delete("/deleteProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const result = await productCollection.deleteOne(filter);
+      res.send(result);
+    });
+
     // (Bulk page) set brand api
 
     app.get("/adminBrands", async (req, res) => {
@@ -489,57 +523,7 @@ async function run() {
       }
     });
 
-    //ssl-wireless single sms
-    app.post("/send-sms", async (req, res) => {
-      try {
-        const response = await axios.post(
-          "https://smsplus.sslwireless.com/api/v3/send-sms",
-          req.body, // Forward the payload received from the frontend
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-          },
-        );
-        res.status(response.status).json(response.data);
-      } catch (error) {
-        console.error(error.message);
-        res.status(500).send("Failed to send SMS");
-      }
-    });
-
-    // get all products
-    app.get("/backup", async (req, res) => {
-      const page = parseInt(req.query.page);
-      const query = {};
-      let products;
-      if (page) {
-        products = await productCollection
-          .find(query)
-          .sort({ date_created: -1 })
-          .skip(page * 100)
-          .limit(100)
-          .toArray();
-      } else {
-        products = await productCollection
-          .find(query)
-          .sort({ date_created: -1 })
-          .limit(100)
-          .toArray();
-      }
-      res.send(products);
-      console.log(products.length);
-    });
-
-    // get single product
-    app.get("/getSingleProduct/:slug", async (req, res) => {
-      const slug = req.params.slug.toString();
-      console.log(slug);
-      const product = await productCollection.findOne({
-        slug: slug,
-      });
-      res.send(product);
-    });
+    // New api end for bulk - esa
 
     // new for Api for Product card new features (navigatin by product size button)
     // get all size variants of the same product name
@@ -604,6 +588,58 @@ async function run() {
       }
     });
 
+    //ssl-wireless single sms
+    app.post("/send-sms", async (req, res) => {
+      try {
+        const response = await axios.post(
+          "https://smsplus.sslwireless.com/api/v3/send-sms",
+          req.body, // Forward the payload received from the frontend
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        res.status(response.status).json(response.data);
+      } catch (error) {
+        console.error(error.message);
+        res.status(500).send("Failed to send SMS");
+      }
+    });
+
+    // get all products
+    app.get("/backup", async (req, res) => {
+      const page = parseInt(req.query.page);
+      const query = {};
+      let products;
+      if (page) {
+        products = await productCollection
+          .find(query)
+          .sort({ date_created: -1 })
+          .skip(page * 100)
+          .limit(100)
+          .toArray();
+      } else {
+        products = await productCollection
+          .find(query)
+          .sort({ date_created: -1 })
+          .limit(100)
+          .toArray();
+      }
+      res.send(products);
+      console.log(products.length);
+    });
+
+    // get single product
+    app.get("/getSingleProduct/:slug", async (req, res) => {
+      const slug = req.params.slug.toString();
+      console.log(slug);
+      const product = await productCollection.findOne({
+        slug: slug,
+      });
+      res.send(product);
+    });
+
     // get single backend product
     app.get("/backendProduct/:id", async (req, res) => {
       const id = req.params.id;
@@ -611,12 +647,6 @@ async function run() {
         _id: new ObjectId(id),
       });
       res.send(product);
-    });
-
-    //get amount of data
-    app.get("/productCount", async (req, res) => {
-      const count = await productCollection.estimatedDocumentCount();
-      res.send({ count });
     });
 
     app.get("/orderCount", async (req, res) => {
@@ -673,6 +703,46 @@ async function run() {
       const cursor = categoryCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
+    });
+
+    // for category ways send matatile, descripton from category collection || MadeByEsa
+    app.get("/category-meta", async (req, res) => {
+      try {
+        const name = String(req.query.name || "").trim();
+
+        if (!name) {
+          return res.status(400).json({ message: "Category name is required" });
+        }
+
+        const category = await categoryCollection.findOne(
+          {
+            name: {
+              $regex: new RegExp(
+                `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                "i",
+              ),
+            },
+          },
+          {
+            projection: {
+              _id: 0,
+              name: 1,
+              meta_title: 1,
+              meta_description: 1,
+            },
+          },
+        );
+
+        if (!category) {
+          return res.status(404).json({ message: "Category not found" });
+        }
+
+        res.set("Cache-Control", "public, max-age=1800");
+        res.json(category);
+      } catch (error) {
+        console.error("category-meta error:", error);
+        res.status(500).json({ message: "Failed to fetch category metadata" });
+      }
     });
 
     //get products by tags
@@ -779,32 +849,6 @@ async function run() {
     app.post("/addProduct", async (req, res) => {
       const product = req.body;
       const result = await productCollection.insertOne(product);
-      res.send(result);
-    });
-
-    // edit product
-    app.put("/editProduct/:id", async (req, res) => {
-      const id = req.params.id;
-      const data = req.body;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
-      const updatedDoc = {
-        $set: data,
-      };
-      const result = await productCollection.updateOne(
-        filter,
-        updatedDoc,
-        options,
-      );
-      res.send(result);
-    });
-
-    // delete product
-    app.delete("/deleteProduct/:id", async (req, res) => {
-      const id = req.params.id;
-      console.log(id);
-      const filter = { _id: new ObjectId(id) };
-      const result = await productCollection.deleteOne(filter);
       res.send(result);
     });
 
