@@ -278,7 +278,7 @@ async function run() {
 
     // New api start for bulk - esa
 
-    // get admin dashboard products
+    // get admin dashboard products || MadeByEsa
     app.get("/Allproducts", async (req, res) => {
       const page = parseInt(req.query.page);
       const query = {};
@@ -301,12 +301,13 @@ async function run() {
       console.log(products.length);
     });
 
-    //get amount of data
+    //get amount of data || MadeByEsa
     app.get("/productCount", async (req, res) => {
       const count = await productCollection.estimatedDocumentCount();
       res.send({ count });
     });
 
+    // || MadeByEsa
     app.get("/adminProductsFiltered", async (req, res) => {
       try {
         const page = Math.max(parseInt(req.query.page || "0", 10), 0);
@@ -454,7 +455,7 @@ async function run() {
       }
     });
 
-    // edit product
+    // edit product  || MadeByEsa
     app.put("/editProduct/:id", async (req, res) => {
       const id = req.params.id;
       const data = req.body;
@@ -471,7 +472,7 @@ async function run() {
       res.send(result);
     });
 
-    // delete product
+    // delete product   || MadeByEsa
     app.delete("/deleteProduct/:id", async (req, res) => {
       const id = req.params.id;
       console.log(id);
@@ -480,8 +481,7 @@ async function run() {
       res.send(result);
     });
 
-    // (Bulk page) set brand api
-
+    // (Bulk page) set brand api  || MadeByEsa
     app.get("/adminBrands", async (req, res) => {
       try {
         const manualBrands = [
@@ -526,7 +526,7 @@ async function run() {
     // New api end for bulk - esa
 
     // new for Api for Product card new features (navigatin by product size button)
-    // get all size variants of the same product name
+    // get all size variants of the same product name || MadeByEsa
     app.get("/productVariants", async (req, res) => {
       try {
         const { name } = req.query;
@@ -560,7 +560,7 @@ async function run() {
       }
     });
 
-    // get a single product by name and size
+    // get a single product by name and size || MadeByEsa
     app.get("/productByNameAndSize", async (req, res) => {
       try {
         const { name, size } = req.query;
