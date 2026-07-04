@@ -276,7 +276,9 @@ async function run() {
       res.send({ count });
     });
 
-    // get admin dashboard products
+    // New api start for bulk - esa
+
+    // get admin dashboard products || MadeByEsa
     app.get("/Allproducts", async (req, res) => {
       const page = parseInt(req.query.page);
       const query = {};
@@ -299,6 +301,13 @@ async function run() {
       console.log(products.length);
     });
 
+    //get amount of data || MadeByEsa
+    app.get("/productCount", async (req, res) => {
+      const count = await productCollection.estimatedDocumentCount();
+      res.send({ count });
+    });
+
+    // || MadeByEsa
     app.get("/adminProductsFiltered", async (req, res) => {
       try {
         const page = Math.max(parseInt(req.query.page || "0", 10), 0);
@@ -446,8 +455,33 @@ async function run() {
       }
     });
 
-    // (Bulk page) set brand api
+    // edit product  || MadeByEsa
+    app.put("/editProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: data,
+      };
+      const result = await productCollection.updateOne(
+        filter,
+        updatedDoc,
+        options,
+      );
+      res.send(result);
+    });
 
+    // delete product   || MadeByEsa
+    app.delete("/deleteProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const result = await productCollection.deleteOne(filter);
+      res.send(result);
+    });
+
+    // (Bulk page) set brand api  || MadeByEsa
     app.get("/adminBrands", async (req, res) => {
       try {
         const manualBrands = [
@@ -486,6 +520,71 @@ async function run() {
           message: "Failed to fetch brands",
           error: error.message,
         });
+      }
+    });
+
+    // New api end for bulk - esa
+
+    // new for Api for Product card new features (navigatin by product size button)
+    // get all size variants of the same product name || MadeByEsa
+    app.get("/productVariants", async (req, res) => {
+      try {
+        const { name } = req.query;
+
+        if (!name) {
+          return res.status(400).send({ message: "Product name is required" });
+        }
+
+        const variants = await productCollection
+          .find({
+            status: "publish",
+            name: { $regex: new RegExp(`^${name}$`, "i") },
+          })
+          .project({
+            _id: 1,
+            name: 1,
+            size: 1,
+            slug: 1,
+            stock_status: 1,
+            regular_price: 1,
+            sale_price: 1,
+            on_sale: 1,
+          })
+          .sort({ size: 1 })
+          .toArray();
+
+        res.send(variants);
+      } catch (error) {
+        console.error("Error fetching product variants:", error);
+        res.status(500).send({ message: "Failed to fetch product variants" });
+      }
+    });
+
+    // get a single product by name and size || MadeByEsa
+    app.get("/productByNameAndSize", async (req, res) => {
+      try {
+        const { name, size } = req.query;
+
+        if (!name || !size) {
+          return res
+            .status(400)
+            .send({ message: "Name and size are required" });
+        }
+
+        const product = await productCollection.findOne({
+          status: "publish",
+          name: { $regex: new RegExp(`^${name}$`, "i") },
+          size: Number(size),
+        });
+
+        if (!product) {
+          return res.status(404).send({ message: "Product not found" });
+        }
+
+        res.send(product);
+      } catch (error) {
+        console.error("Error fetching product by name and size:", error);
+        res.status(500).send({ message: "Failed to fetch product" });
       }
     });
 
@@ -541,69 +640,6 @@ async function run() {
       res.send(product);
     });
 
-    // new for Api for Product card new features (navigatin by product size button)
-    // get all size variants of the same product name
-    app.get("/productVariants", async (req, res) => {
-      try {
-        const { name } = req.query;
-
-        if (!name) {
-          return res.status(400).send({ message: "Product name is required" });
-        }
-
-        const variants = await productCollection
-          .find({
-            status: "publish",
-            name: { $regex: new RegExp(`^${name}$`, "i") },
-          })
-          .project({
-            _id: 1,
-            name: 1,
-            size: 1,
-            slug: 1,
-            stock_status: 1,
-            regular_price: 1,
-            sale_price: 1,
-            on_sale: 1,
-          })
-          .sort({ size: 1 })
-          .toArray();
-
-        res.send(variants);
-      } catch (error) {
-        console.error("Error fetching product variants:", error);
-        res.status(500).send({ message: "Failed to fetch product variants" });
-      }
-    });
-
-    // get a single product by name and size
-    app.get("/productByNameAndSize", async (req, res) => {
-      try {
-        const { name, size } = req.query;
-
-        if (!name || !size) {
-          return res
-            .status(400)
-            .send({ message: "Name and size are required" });
-        }
-
-        const product = await productCollection.findOne({
-          status: "publish",
-          name: { $regex: new RegExp(`^${name}$`, "i") },
-          size: Number(size),
-        });
-
-        if (!product) {
-          return res.status(404).send({ message: "Product not found" });
-        }
-
-        res.send(product);
-      } catch (error) {
-        console.error("Error fetching product by name and size:", error);
-        res.status(500).send({ message: "Failed to fetch product" });
-      }
-    });
-
     // get single backend product
     app.get("/backendProduct/:id", async (req, res) => {
       const id = req.params.id;
@@ -611,12 +647,6 @@ async function run() {
         _id: new ObjectId(id),
       });
       res.send(product);
-    });
-
-    //get amount of data
-    app.get("/productCount", async (req, res) => {
-      const count = await productCollection.estimatedDocumentCount();
-      res.send({ count });
     });
 
     app.get("/orderCount", async (req, res) => {
@@ -673,6 +703,46 @@ async function run() {
       const cursor = categoryCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
+    });
+
+    // for category ways send matatile, descripton from category collection || MadeByEsa
+    app.get("/category-meta", async (req, res) => {
+      try {
+        const name = String(req.query.name || "").trim();
+
+        if (!name) {
+          return res.status(400).json({ message: "Category name is required" });
+        }
+
+        const category = await categoryCollection.findOne(
+          {
+            name: {
+              $regex: new RegExp(
+                `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                "i",
+              ),
+            },
+          },
+          {
+            projection: {
+              _id: 0,
+              name: 1,
+              meta_title: 1,
+              meta_description: 1,
+            },
+          },
+        );
+
+        if (!category) {
+          return res.status(404).json({ message: "Category not found" });
+        }
+
+        res.set("Cache-Control", "public, max-age=1800");
+        res.json(category);
+      } catch (error) {
+        console.error("category-meta error:", error);
+        res.status(500).json({ message: "Failed to fetch category metadata" });
+      }
     });
 
     //get products by tags
@@ -779,32 +849,6 @@ async function run() {
     app.post("/addProduct", async (req, res) => {
       const product = req.body;
       const result = await productCollection.insertOne(product);
-      res.send(result);
-    });
-
-    // edit product
-    app.put("/editProduct/:id", async (req, res) => {
-      const id = req.params.id;
-      const data = req.body;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
-      const updatedDoc = {
-        $set: data,
-      };
-      const result = await productCollection.updateOne(
-        filter,
-        updatedDoc,
-        options,
-      );
-      res.send(result);
-    });
-
-    // delete product
-    app.delete("/deleteProduct/:id", async (req, res) => {
-      const id = req.params.id;
-      console.log(id);
-      const filter = { _id: new ObjectId(id) };
-      const result = await productCollection.deleteOne(filter);
       res.send(result);
     });
 
